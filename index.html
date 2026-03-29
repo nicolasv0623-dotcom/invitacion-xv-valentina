@@ -1923,51 +1923,101 @@ function generateConfirmationsTXT(confirmations, source) {
     showToast(`Archivo descargado (${confirmations.length} confirmaciones) 📋`);
 }
         function downloadPlaylist() {
-            const suggestions = StorageManager.getPlaylistSuggestions();
-            
-            if (suggestions.length === 0) {
-                showToast('No hay sugerencias de playlist', 'error');
-                return;
+    showToast('Descargando playlist...');
+    
+    fetch(SCRIPT_URL + '?action=getPlaylist')
+        .then(response => response.json())
+        .then(result => {
+            if (result.success && result.data && result.data.length > 0) {
+                generatePlaylistTXT(result.data, 'servidor');
+            } else {
+                // Si no hay en servidor, usar local
+                const localData = StorageManager.getPlaylistSuggestions();
+                if (localData.length > 0) {
+                    generatePlaylistTXT(localData, 'local');
+                } else {
+                    showToast('No hay sugerencias de playlist', 'error');
+                }
             }
-            
-            // Crear contenido formateado
-            let content = "PLAYLIST SUGERIDA - XV VALENTINA SAENZ VARGAS\n";
-            content += "=============================================\n\n";
-            content += `Total de sugerencias: ${suggestions.length}\n`;
-            content += `Fecha de descarga: ${new Date().toLocaleString('es-CO')}\n\n`;
-            content += "------------------------------------------\n\n";
-            
-            // Agrupar por categoría
-            const porCategoria = {};
-            suggestions.forEach(sug => {
-                if (!porCategoria[sug.categoria]) {
-                    porCategoria[sug.categoria] = [];
-                }
-                porCategoria[sug.categoria].push(sug);
-            });
-            
-            // Ordenar categorías
-            const categorias = ['reggaeton', 'merengue', 'salsa', 'popular'];
-            
-            categorias.forEach(cat => {
-                if (porCategoria[cat]) {
-                    content += `\n🎵 ${cat.toUpperCase()}\n`;
-                    content += "------------------------\n";
-                    
-                    porCategoria[cat].forEach((sug, index) => {
-                        content += `\nSugerencia #${index + 1} - ${sug.invitado}\n`;
-                        content += `Fecha: ${sug.timestamp}\n`;
-                        content += `Canciones:\n${sug.sugerencias}\n`;
-                    });
-                    
-                    content += "\n";
-                }
-            });
-            
-            // Descargar archivo
-            downloadFile(content, `playlist_xv_valentina_${formatDateFile()}.txt`, 'text/plain');
-            showToast('Archivo de playlist descargado 🎵');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // Fallback a localStorage
+            const localData = StorageManager.getPlaylistSuggestions();
+            if (localData.length > 0) {
+                generatePlaylistTXT(localData, 'local (offline)');
+            } else {
+                showToast('No hay sugerencias disponibles', 'error');
+            }
+        });
+}
+        function generatePlaylistTXT(suggestions, source) {
+    let content = "PLAYLIST SUGERIDA - XV VALENTINA SAENZ VARGAS\n";
+    content += "=============================================\n\n";
+    content += `Total de sugerencias: ${suggestions.length}\n`;
+    content += `Fuente: ${source}\n`;
+    content += `Fecha de descarga: ${new Date().toLocaleString('es-CO')}\n\n";
+    content += "------------------------------------------\n\n";
+    
+    // Agrupar por categoría
+    const porCategoria = {};
+    suggestions.forEach(sug => {
+        const cat = sug.categoria || sug[2] || 'Sin categoría';
+        if (!porCategoria[cat]) {
+            porCategoria[cat] = [];
         }
+        porCategoria[cat].push(sug);
+    });
+    
+    // Ordenar categorías
+    const categorias = ['reggaeton', 'merengue', 'salsa', 'popular'];
+    const emojis = {
+        'reggaeton': '🔥',
+        'merengue': '💃',
+        'salsa': '🎺',
+        'popular': '🤠'
+    };
+    
+    categorias.forEach(cat => {
+        if (porCategoria[cat]) {
+            content += `\n${emojis[cat] || '🎵'} ${cat.toUpperCase()}\n`;
+            content += "------------------------\n";
+            
+            porCategoria[cat].forEach((sug, index) => {
+                const invitado = sug.invitado || sug[1];
+                const fecha = sug.timestamp || sug.fecha || sug[0] || 'Fecha desconocida';
+                const canciones = sug.sugerencias || sug[3];
+                
+                content += `\nSugerencia #${index + 1} - ${invitado}\n`;
+                content += `Fecha: ${fecha}\n`;
+                content += `Canciones:\n${canciones}\n`;
+            });
+            
+            content += "\n";
+        }
+    });
+    
+    // Si hay categorías no listadas
+    Object.keys(porCategoria).forEach(cat => {
+        if (!categorias.includes(cat)) {
+            content += `\n🎵 ${cat.toUpperCase()}\n`;
+            content += "------------------------\n";
+            
+            porCategoria[cat].forEach((sug, index) => {
+                const invitado = sug.invitado || sug[1];
+                const fecha = sug.timestamp || sug.fecha || sug[0] || 'Fecha desconocida';
+                const canciones = sug.sugerencias || sug[3];
+                
+                content += `\nSugerencia #${index + 1} - ${invitado}\n`;
+                content += `Fecha: ${fecha}\n`;
+                content += `Canciones:\n${canciones}\n`;
+            });
+        }
+    });
+    
+    downloadFile(content, `playlist_xv_valentina_${formatDateFile()}.txt`, 'text/plain');
+    showToast(`Playlist descargada (${suggestions.length} sugerencias) 🎵`);
+}
 
         function viewStats() {
     fetch(SCRIPT_URL + '?action=getConfirmations')
