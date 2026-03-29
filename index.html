@@ -1759,28 +1759,49 @@
 
         // Guardar playlist - GUARDAR EN LOCALSTORAGE
         function savePlaylist() {
-            const suggestions = document.getElementById('playlistSuggestions').value;
-            const guestName = document.getElementById('guestName').textContent;
-            
-            if (!suggestions.trim()) {
-                closePlaylistModal();
-                return;
-            }
-            
-            const playlistData = {
-                invitado: guestName,
-                categoria: selectedCategory,
-                sugerencias: suggestions,
-                fecha: new Date().toLocaleString('es-CO')
-            };
-            
-            StorageManager.savePlaylistSuggestion(playlistData);
-            
-            showToast('¡Sugerencias guardadas! 🎵');
-            closePlaylistModal();
-            document.getElementById('playlistSuggestions').value = '';
-        }
-
+    const suggestions = document.getElementById('playlistSuggestions').value;
+    const guestName = document.getElementById('guestName').textContent;
+    
+    if (!suggestions.trim()) {
+        closePlaylistModal();
+        return;
+    }
+    
+    const playlistData = {
+        invitado: guestName,
+        categoria: selectedCategory,
+        sugerencias: suggestions,
+        dispositivo: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ? 'Móvil' : 'Computadora'
+    };
+    
+    // Guardar localmente primero (backup)
+    StorageManager.savePlaylistSuggestion({
+        invitado: guestName,
+        categoria: selectedCategory,
+        sugerencias: suggestions,
+        fecha: new Date().toLocaleString('es-CO')
+    });
+    
+    // Enviar a Google Sheets
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(playlistData)
+    })
+    .then(() => {
+        showToast('¡Sugerencias guardadas! 🎵');
+        closePlaylistModal();
+        document.getElementById('playlistSuggestions').value = '';
+    })
+    .catch(() => {
+        showToast('Guardado localmente 🎵');
+        closePlaylistModal();
+    });
+}
+        
         // Contraseña del admin (cámbiala por la que prefieras)
         const ADMIN_PASSWORD = 'valentina2026';
 
