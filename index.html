@@ -1833,42 +1833,74 @@
         }
 
         function downloadConfirmations() {
-            const confirmations = StorageManager.getConfirmations();
-            
-            if (confirmations.length === 0) {
-                showToast('No hay confirmaciones registradas', 'error');
-                return;
-            }
-            
-                        // Crear contenido formateado
-            let content = "CONFIRMACIONES XV VALENTINA SAENZ VARGAS\n";
-            content += "==========================================\n\n";
-            content += `Total de confirmaciones: ${confirmations.length}\n`;
-            content += `Fecha de descarga: ${new Date().toLocaleString('es-CO')}\n\n`;
-            content += "------------------------------------------\n\n";
-            
-            confirmations.forEach((conf, index) => {
-                content += `CONFIRMACIÓN #${index + 1}\n`;
-                content += `Fecha: ${conf.timestamp}\n`;
-                content += `Invitado Principal: ${conf.invitadoPrincipal}\n`;
-                content += `Total de Invitados: ${conf.totalInvitados}\n`;
-                
-                if (conf.acompañantes && conf.acompañantes.length > 0) {
-                    content += `Acompañantes:\n`;
-                    conf.acompañantes.forEach((acc, i) => {
-                        content += `  ${i + 2}. ${acc}\n`;
-                    });
+    showToast('Descargando confirmaciones...');
+    
+    // Intentar obtener del servidor primero
+    fetch(SCRIPT_URL + '?action=getConfirmations')
+        .then(response => response.json())
+        .then(result => {
+            if (result.success && result.data && result.data.length > 0) {
+                generateConfirmationsTXT(result.data, 'servidor');
+            } else {
+                // Si no hay en servidor, usar local
+                const localData = StorageManager.getConfirmations();
+                if (localData.length > 0) {
+                    generateConfirmationsTXT(localData, 'local');
+                } else {
+                    showToast('No hay confirmaciones registradas', 'error');
                 }
-                
-                content += `Teléfono: ${conf.telefono}\n`;
-                content += "------------------------------------------\n\n";
-            });
-            
-            // Descargar archivo
-            downloadFile(content, `confirmaciones_xv_valentina_${formatDateFile()}.txt`, 'text/plain');
-            showToast('Archivo de confirmaciones descargado 📋');
-        }
+            }
+        })
+        .catch(error => {
+            console.error('Error al obtener del servidor:', error);
+            // Fallback a localStorage
+            const localData = StorageManager.getConfirmations();
+            if (localData.length > 0) {
+                generateConfirmationsTXT(localData, 'local (offline)');
+            } else {
+                showToast('No hay confirmaciones disponibles', 'error');
+            }
+        });
+}
 
+// Función auxiliar para generar el TXT (igual de bonito que antes)
+function generateConfirmationsTXT(confirmations, source) {
+    let content = "CONFIRMACIONES XV VALENTINA SAENZ VARGAS\n";
+    content += "==========================================\n\n";
+    content += `Total de confirmaciones: ${confirmations.length}\n`;
+    content += `Fuente: ${source}\n`;
+    content += `Fecha de descarga: ${new Date().toLocaleString('es-CO')}\n\n`;
+    content += "------------------------------------------\n\n";
+    
+    confirmations.forEach((conf, index) => {
+        // Manejar tanto formato servidor como local
+        const timestamp = conf.timestamp || (conf[0] ? new Date(conf[0]).toLocaleString('es-CO') : 'Fecha desconocida');
+        const invitado = conf.invitadoPrincipal || conf[1];
+        const total = conf.totalInvitados || conf[2];
+        const acompanantes = conf.acompañantes || (conf[3] ? conf[3].split(' | ') : []);
+        const telefono = conf.telefono || conf[4] || 'No proporcionado';
+        
+        content += `CONFIRMACIÓN #${index + 1}\n`;
+        content += `Fecha: ${timestamp}\n`;
+        content += `Invitado Principal: ${invitado}\n`;
+        content += `Total de Invitados: ${total}\n`;
+        
+        if (acompanantes && acompanantes.length > 0 && acompanantes[0] !== '') {
+            content += `Acompañantes:\n`;
+            acompanantes.forEach((acc, i) => {
+                if (acc.trim()) {
+                    content += `  ${i + 2}. ${acc}\n`;
+                }
+            });
+        }
+        
+        content += `Teléfono: ${telefono}\n`;
+        content += "------------------------------------------\n\n";
+    });
+    
+    downloadFile(content, `confirmaciones_xv_valentina_${formatDateFile()}.txt`, 'text/plain');
+    showToast(`Archivo descargado (${confirmations.length} confirmaciones) 📋`);
+}
         function downloadPlaylist() {
             const suggestions = StorageManager.getPlaylistSuggestions();
             
@@ -1917,31 +1949,56 @@
         }
 
         function viewStats() {
-            const confirmations = StorageManager.getConfirmations();
-            const playlist = StorageManager.getPlaylistSuggestions();
+    fetch(SCRIPT_URL + '?action=getConfirmations')
+        .then(response => response.json())
+        .then(result => {
+            let confirmations = [];
+            if (result.success && result.data) {
+                confirmations = result.data;
+            }
+            
+            // Combinar con localStorage por si hay offline
+            const localData = StorageManager.getConfirmations();
+            const allData = confirmations.length > 0 ? confirmations : localData;
             
             let totalInvitados = 0;
-            confirmations.forEach(c => {
-                totalInvitados += c.totalInvitados;
+            allData.forEach(c => {
+                totalInvitados += parseInt(c.totalInvitados || c[2]) || 0;
             });
             
             const statsContent = `
 ESTADÍSTICAS XV VALENTINA
 ========================
 
-📋 Confirmaciones: ${confirmations.length}
+📋 Confirmaciones: ${allData.length}
 👥 Total de personas: ${totalInvitados}
-🎵 Sugerencias musicales: ${playlist.length}
 
 Detalle por número de invitados:
-• 1 persona: ${confirmations.filter(c => c.totalInvitados === 1).length}
-• 2 personas: ${confirmations.filter(c => c.totalInvitados === 2).length}
-• 3+ personas: ${confirmations.filter(c => c.totalInvitados >= 3).length}
+• 1 persona: ${allData.filter(c => (c.totalInvitados || c[2]) == 1).length}
+• 2 personas: ${allData.filter(c => (c.totalInvitados || c[2]) == 2).length}
+• 3+ personas: ${allData.filter(c => (c.totalInvitados || c[2]) >= 3).length}
+
+Fuente: ${confirmations.length > 0 ? 'Servidor + Local' : 'Solo local'}
             `;
             
             alert(statsContent);
-        }
+        })
+        .catch(() => {
+            // Si falla, mostrar solo locales
+            const localData = StorageManager.getConfirmations();
+            let totalInvitados = 0;
+            localData.forEach(c => totalInvitados += c.totalInvitados);
+            
+            alert(`
+ESTADÍSTICAS (MODO OFFLINE)
+========================
 
+📋 Confirmaciones locales: ${localData.length}
+👥 Total de personas: ${totalInvitados}
+            `);
+        });
+}
+        
         function clearAllData() {
             if (confirm('¿Estás seguro de que deseas eliminar TODOS los datos? Esta acción no se puede deshacer.')) {
                 StorageManager.clearAll();
