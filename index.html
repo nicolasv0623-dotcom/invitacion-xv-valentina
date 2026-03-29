@@ -1681,51 +1681,81 @@
 
         // Confirmar asistencia - GUARDAR EN LOCALSTORAGE
         function confirmAttendance() {
-            const name = document.getElementById('confirmName').value;
-            const guests = document.getElementById('guestsCount').value;
-            const phone = document.getElementById('phoneNumber').value;
-            
-            const guestNames = [];
-            const count = parseInt(guests);
-            
-            if (count >= 2) {
-                for (let i = 2; i <= count; i++) {
-                    const guestInput = document.getElementById(`guest${i}`);
-                    if (guestInput && guestInput.value.trim()) {
-                        guestNames.push(guestInput.value.trim());
-                    }
-                }
+    const name = document.getElementById('confirmName').value;
+    const guests = document.getElementById('guestsCount').value;
+    const phone = document.getElementById('phoneNumber').value;
+    
+    const guestNames = [];
+    const count = parseInt(guests);
+    
+    if (count >= 2) {
+        for (let i = 2; i <= count; i++) {
+            const guestInput = document.getElementById(`guest${i}`);
+            if (guestInput && guestInput.value.trim()) {
+                guestNames.push(guestInput.value.trim());
             }
-            
-            if (!name || !guests) {
-                showToast('Por favor complete todos los campos obligatorios', 'error');
-                return;
-            }
-            
-            if (count >= 2 && guestNames.length < (count - 1)) {
-                showToast('Por favor ingrese los nombres de todos los acompañantes', 'error');
-                return;
-            }
-            
-            // Guardar en localStorage
-            const confirmationData = {
-                invitadoPrincipal: name,
-                totalInvitados: parseInt(guests),
-                acompañantes: guestNames,
-                telefono: phone || 'No proporcionado',
-                fechaConfirmacion: new Date().toLocaleString('es-CO')
-            };
-            
-            StorageManager.saveConfirmation(confirmationData);
-            
-            showToast('¡Confirmación guardada exitosamente! 🎉');
-            closeRSVPModal();
-            
-            // Limpiar formulario
-            document.getElementById('phoneNumber').value = '';
-            document.getElementById('guestsCount').value = 1;
-            updateGuestsInputs();
         }
+    }
+    
+    if (!name || !guests) {
+        showToast('Por favor complete todos los campos obligatorios', 'error');
+        return;
+    }
+    
+    if (count >= 2 && guestNames.length < (count - 1)) {
+        showToast('Por favor ingrese los nombres de todos los acompañantes', 'error');
+        return;
+    }
+    
+    const confirmationData = {
+        invitadoPrincipal: name,
+        totalInvitados: parseInt(guests),
+        acompañantes: guestNames,
+        telefono: phone || 'No proporcionado',
+        dispositivo: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ? 'Móvil' : 'Computadora'
+    };
+    
+    // Mostrar cargando
+    const confirmBtn = document.querySelector('.btn-confirm-modal');
+    const originalText = confirmBtn.textContent;
+    confirmBtn.textContent = 'Enviando...';
+    confirmBtn.disabled = true;
+    
+    // Enviar a Google Sheets
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(confirmationData)
+    })
+    .then(() => {
+        // Guardar también localmente como backup
+        confirmationData.timestamp = new Date().toLocaleString('es-CO');
+        StorageManager.saveConfirmation(confirmationData);
+        
+        showToast('¡Confirmación enviada! 🎉');
+        closeRSVPModal();
+        
+        // Limpiar formulario
+        document.getElementById('phoneNumber').value = '';
+        document.getElementById('guestsCount').value = 1;
+        updateGuestsInputs();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        // Si falla, guardar localmente
+        confirmationData.timestamp = new Date().toLocaleString('es-CO');
+        StorageManager.saveConfirmation(confirmationData);
+        showToast('Guardado localmente (modo offline)');
+        closeRSVPModal();
+    })
+    .finally(() => {
+        confirmBtn.textContent = originalText;
+        confirmBtn.disabled = false;
+    });
+}
 
         // Guardar playlist - GUARDAR EN LOCALSTORAGE
         function savePlaylist() {
